@@ -103,10 +103,11 @@ class TqdmAbsolute(tqdm):
         super().update(to - self.n)  # will also set self.n = b * bsize
 
 class TaskThread(Thread):
-    def __init__(self, host: str, task_queue: SimpleQueue, bar_pos):
+    def __init__(self, host: str, arg: str, task_queue: SimpleQueue, bar_pos):
         super().__init__()
         self._should_stop = False
         self._host = host
+        self._arg = arg
         self._task_queue = task_queue
         self._ffmpeg = None
         self._bar = TqdmAbsolute(desc=host, position=bar_pos)
@@ -135,7 +136,7 @@ class TaskThread(Thread):
                         '-f', 'matroska', 'pipe:'
                     ]
                     if self._host != 'localhost':
-                        ffmpeg_cmd = ['ssh', self._host, join(ffmpeg_cmd)]
+                        ffmpeg_cmd = ['ssh', self._host, self._arg, join(ffmpeg_cmd)]
                     self._ffmpeg = FFMPEGProc(ffmpeg_cmd, stdin=infile, stdout=outfile, update_callback=upd)
 
                     ret = self._ffmpeg.run()
@@ -147,7 +148,7 @@ class TaskThread(Thread):
             pass
         self._bar.close()
 
-def encode(hosts: List[str], input_file: str, output_file: str, segment_seconds: float = 60, remote_args: str = '', concat_args: str = '', tmp_dir: str = None, keep_tmp=False, resume=False, copy_input=False):
+def encode(hosts: List[str], args: List[str],input_file: str, output_file: str, segment_seconds: float = 60, remote_args: str = '', concat_args: str = '', tmp_dir: str = None, keep_tmp=False, resume=False, copy_input=False):
     input_file = abspath(expanduser(input_file))
     output_file = abspath(expanduser(output_file))
     tmp_dir = tmp_dir or 'ffmpeg_segments_'+md5(input_file.encode()).hexdigest()
@@ -189,7 +190,7 @@ def encode(hosts: List[str], input_file: str, output_file: str, segment_seconds:
         if not isfile(output_segment):
             task_queue.put(Task(f, output_segment, split(remote_args)))
 
-    threads = [TaskThread(host, task_queue, pos) for pos,host in enumerate(hosts,0)]
+    threads = [TaskThread(host, arg, task_queue, pos) for host,arg,pos in zip(hosts,args,range(len(hosts)))]
 
     def sigint(sig, stack):
         print('Got SIGINT, stopping...')
@@ -244,6 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('concat_args', default='', help='Arguments to pass to the local ffmpeg concatenating the processed video segments and muxing it with the original audio/subs/metadata. Mainly useful for audio encoding options, or "-an" to get rid of it.')
     parser.add_argument('-s', '--segment-length', type=float, default=10, help='Segment length in seconds.')
     parser.add_argument('-H', '--host', action='append', help='SSH hostname(s) to encode on. Use "localhost" to include the machine you\'re running this from. Can include username.', required=True)
+    parser.add_argument('-A', '--args', default=None, action='append', help='SSH arguments to use with the previous host.', required=False)
     parser.add_argument('-k', '--keep-tmp', action='store_true', help='Keep temporary segment files instead of deleting them on successful exit.')
     parser.add_argument('-r', '--resume', action='store_true', help='Don\'t split the input file again, keep existing segments and only process the missing ones.')
     parser.add_argument('-t', '--tmp-dir', default=None, help='Directory to use for temporary files. Should not already exist and will be deleted afterwards.')
@@ -251,6 +253,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     encode(
         args.host,
+        args.args,
         args.input_file,
         args.output_file,
         segment_seconds=args.segment_length,

@@ -1,5 +1,5 @@
 # ffmpeg_distributed
-"Simple" little script I use for distributed ffmpeg stuff that  
+"Simple" little script I use for distributed ffmpeg stuff that
 * Splits input file into segments
 * Pipes them through SSH, through ffmpeg on remote hosts in parallel
 * Concats the processed segments
@@ -30,6 +30,8 @@ optional arguments:
                         Segment length in seconds.
   -H HOST, --host HOST  SSH hostname(s) to encode on. Use "localhost" to include the machine you're running this from.
                         Can include username.
+  -A SSHARGS, --args SSHARGS
+                        SSH arguments to use with the previous host.', required=False)
   -k, --keep-tmp        Keep temporary segment files instead of deleting them on successful exit.
   -r, --resume          Don't split the input file again, keep existing segments and only process the missing ones.
   -t TMP_DIR, --tmp-dir TMP_DIR
